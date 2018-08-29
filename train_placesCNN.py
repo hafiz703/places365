@@ -63,21 +63,36 @@ best_prec1 = 0
 def main():
     global args, best_prec1
     args = parser.parse_args()
-    print args
+    # print (args)
     # create model
     print("=> creating model '{}'".format(args.arch))
-    if args.arch.lower().startswith('wideresnet'):
-        # a customized resnet model with last feature map size as 14x14 for better class activation mapping
-        model  = wideresnet.resnet50(num_classes=args.num_classes)
+    if args.arch.lower().startswith('wideresnet_freeze'):
+        
+        model_file = 'wideresnet18_places365_1.pth.tar'
+        model = wideresnet.resnet18(num_classes=365)
+        checkpoint = torch.load(model_file, map_location=lambda storage, loc: storage)
+        state_dict = {str.replace(k,'module.',''): v for k,v in checkpoint['state_dict'].items()}
+        model.load_state_dict(state_dict)
+        model.eval()
+        for name,param in model.named_parameters():             
+            # print(name)
+            if "fc" not in name:     
+                param.requires_grad = False
+         
     else:
-        model = models.__dict__[args.arch](num_classes=args.num_classes)
+        if args.arch.lower().startswith('wideresnet'):
+            # a customized resnet model with last feature map size as 14x14 for better class activation mapping
+            
+            model  = wideresnet.resnet50(num_classes=args.num_classes)
+        else:
+            model = models.__dict__[args.arch](num_classes=args.num_classes)
 
-    if args.arch.lower().startswith('alexnet') or args.arch.lower().startswith('vgg'):
-        model.features = torch.nn.DataParallel(model.features)
-        model.cuda()
-    else:
-        model = torch.nn.DataParallel(model).cuda()
-    print model
+        if args.arch.lower().startswith('alexnet') or args.arch.lower().startswith('vgg'):
+            model.features = torch.nn.DataParallel(model.features)
+            model.cuda()
+        else:
+            model = torch.nn.DataParallel(model).cuda()
+    # print (model)
     # optionally resume from a checkpoint
     if args.resume:
         if os.path.isfile(args.resume):
@@ -94,6 +109,7 @@ def main():
     cudnn.benchmark = True
 
     # Data loading code
+    print("DATA",args.data)
     traindir = os.path.join(args.data, 'train')
     valdir = os.path.join(args.data, 'val')
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -165,7 +181,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # measure data loading time
         data_time.update(time.time() - end)
 
-        target = target.cuda(async=True)
+        # target = target.cuda(async=True)
         input_var = torch.autograd.Variable(input)
         target_var = torch.autograd.Variable(target)
         # compute output
@@ -209,7 +225,7 @@ def validate(val_loader, model, criterion):
 
     end = time.time()
     for i, (input, target) in enumerate(val_loader):
-        target = target.cuda(async=True)
+        # target = target.cuda(async=True)
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target, volatile=True)
 
